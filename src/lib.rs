@@ -36,6 +36,8 @@
 #![cfg_attr(not(feature = "std"), no_std)]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 #![allow(clippy::unreadable_literal)]
+#![feature(const_generics)]
+#![feature(const_evaluatable_checked)]
 
 #[cfg(feature = "alloc")]
 extern crate alloc;
@@ -352,6 +354,35 @@ pub fn encode_to_slice<T: AsRef<[u8]>>(input: T, output: &mut [u8]) -> Result<()
     Ok(())
 }
 
+/// Encodes a fixed length of bytes to a mutable slice of bytes.
+///
+/// The output buffer, must hold `input.len() * 2` bytes, otherwise this
+/// function will not compile.
+///
+/// # Example
+///
+/// ```
+/// # use hex::FromHexError;
+/// # fn main() {
+/// let mut bytes = [0u8; 4 * 2];
+///
+/// hex::encode_fixed(b"kiwi", &mut bytes);
+/// assert_eq!(&bytes, b"6b697769");
+/// # Ok(())
+/// # }
+/// ```
+pub fn encode_fixed<const L: usize>(input: &[u8; L], output: &mut [u8; L * 2]) {
+    for (byte, (i, j)) in input
+        .as_ref()
+        .iter()
+        .zip(generate_iter(input.as_ref().len() * 2))
+    {
+        let (high, low) = byte2hex(*byte, HEX_CHARS_LOWER);
+        output[i] = high;
+        output[j] = low;
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -403,6 +434,15 @@ mod test {
             decode_to_slice(b"6", &mut output_3),
             Err(FromHexError::OddLength)
         );
+    }
+
+    #[test]
+    fn test_encode_fixed() {
+        let mut input_1 = [0; 4];
+        input_1.copy_from_slice(b"kiwi");
+        let mut output_1 = [0; 4 * 2];
+        encode_fixed(&input_1, &mut output_1);
+        assert_eq!(&output_1, b"6b697769");
     }
 
     #[test]
